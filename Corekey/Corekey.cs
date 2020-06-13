@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -58,9 +59,9 @@ namespace Corekey
 
 	public class App
 	{
-		public string Host { get; set; }
-		public string Secret { get; set; }
-		
+		public string Host { get; private set; }
+		public string Secret { get; private set; }
+
 		public App(string host, string appSecret)
 		{
 			this.Host = host;
@@ -101,14 +102,12 @@ namespace Corekey
 		private App App;
 		private string Token;
 		public string Url { get; private set; }
-		private bool Cancel;
 
 		public AuthSession(App app, string token, string url)
 		{
 			this.App = app;
 			this.Token = token;
 			this.Url = url;
-			this.Cancel = false;
 		}
 
 		public static async Task<AuthSession> Generate(App app)
@@ -132,13 +131,15 @@ namespace Corekey
 			return new UserToken(userToken.Value<string>("accessToken"), userToken["user"].ToObject<JObject>());
 		}
 
-		public async Task<Account> WaitForAuth()
+		public async Task<Account> WaitForAuth(CancellationToken? ct = null)
 		{
 			UserToken token;
 			while (true)
 			{
+				ct?.ThrowIfCancellationRequested();
 				token = await this.GetUserToken();
 				if (token != null) break;
+				ct?.ThrowIfCancellationRequested();
 				await Task.Delay(2000);
 			}
 			return new Account(this.App, token.AccessToken);
@@ -147,8 +148,8 @@ namespace Corekey
 
 	public class Account
 	{
-		public App App;
-		public string AccessToken;
+		public App App { get; private set; }
+		public string AccessToken { get; private set; }
 		private string i;
 
 		public Account(App app, string accessToken)
@@ -164,6 +165,7 @@ namespace Corekey
 			}
 
 			this.App = app;
+			this.AccessToken = accessToken;
 			this.i = calcAccessToken(app.Secret, accessToken);
 		}
 
